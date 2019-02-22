@@ -72,17 +72,8 @@ namespace THNETII.GraphQL.Http
             using (var payloadContent = CreatePayloadContent())
             using (var httpResponse = await httpPostAsync(endpoint, payloadContent, cancelToken).ConfigureAwait(false))
             {
-                httpResponse.EnsureSuccessStatusCode();
-                using (var responseReader = await httpResponse.Content.ReadAsStreamReaderAsync().ConfigureAwait(false))
-                using (var jsonReader = new JsonTextReader(responseReader))
-                {
-                    var jsonResponse = await JObject.LoadAsync(jsonReader, cancelToken).ConfigureAwait(false);
-                    if (jsonResponse.TryGetValue(GraphQLResponse.ErrorsFieldName, out JToken errorToken))
-                        throw new GraphQLException((errorToken as JObject).ToObject<GraphQLError>(), jsonResponse);
-                    else if (jsonResponse.TryGetValue(GraphQLResponse.DataFieldName, out JToken dataToken))
-                        return dataToken;
-                    return null;
-                }
+                return await ProcessHttpResponse(httpResponse, cancelToken)
+                    .ConfigureAwait(false);
             }
 
             StringContent CreatePayloadContent()
@@ -104,11 +95,26 @@ namespace THNETII.GraphQL.Http
         private static void FillPayloadDictionary(Dictionary<string, JToken> payloadDict, GraphQLRequest request)
         {
             if (request.OperationName.TryNotNullOrWhiteSpace(out string operationName))
-                payloadDict[nameof(operationName)] = operationName;
+                payloadDict[GraphQLRequest.OperationNameFieldName] = operationName;
             if (request.Query.TryNotNullOrWhiteSpace(out string query))
-                payloadDict[nameof(query)] = query;
+                payloadDict[GraphQLRequest.QueryFieldName] = query;
             if (request.Variables.TryNotNullOrEmpty(out var variables))
-                payloadDict[nameof(variables)] = new JObject(variables);
+                payloadDict[GraphQLRequest.VariablesFieldName] = new JObject(variables);
+        }
+
+        private static async Task<JToken> ProcessHttpResponse(HttpResponseMessage httpResponse, CancellationToken cancelToken)
+        {
+            httpResponse.EnsureSuccessStatusCode();
+            using (var responseReader = await httpResponse.Content.ReadAsStreamReaderAsync().ConfigureAwait(false))
+            using (var jsonReader = new JsonTextReader(responseReader))
+            {
+                var jsonResponse = await JObject.LoadAsync(jsonReader, cancelToken).ConfigureAwait(false);
+                if (jsonResponse.TryGetValue(GraphQLResponse.ErrorsFieldName, out JToken errorToken))
+                    throw new GraphQLException((errorToken as JObject).ToObject<GraphQLError>(), jsonResponse);
+                else if (jsonResponse.TryGetValue(GraphQLResponse.DataFieldName, out JToken dataToken))
+                    return dataToken;
+                return null;
+            }
         }
 
         #region IDisposable Support
