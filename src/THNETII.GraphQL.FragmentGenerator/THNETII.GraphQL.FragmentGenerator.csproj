@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <PackageReference Include="GraphQL" Version="2.4" />
-    <PackageReference Include="GraphQL.Client" Version="1.0" />
+    <PackageReference Include="GraphQL.Client" Version="1.0.3" />
     <PackageReference Include="System.CommandLine.Experimental" Version="0.1-*" />
   </ItemGroup>
 
