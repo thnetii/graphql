@@ -2,19 +2,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <LangVersion>7.2</LangVersion>
+    <LangVersion>8</LangVersion>
     <TargetFramework>netstandard2.0</TargetFramework>
     <Product>TH-NETII GraphQL HTTP Client extension library</Product>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\dotnet-common\src\THNETII.Common\THNETII.Common.csproj" />
     <ProjectReference Include="..\..\dotnet-common\src\THNETII.Networking.Http\THNETII.Networking.Http.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="3.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
     <PackageReference Include="System.Net.Http" Version="4.3.4" />
   </ItemGroup>

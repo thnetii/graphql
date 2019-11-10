@@ -25,18 +25,14 @@ namespace THNETII.GraphQL.Http
         /// <inheritdoc />
         public bool Equals(GraphQLLocation other)
         {
-            switch (other)
+            return other switch
             {
-                case null:
-                    return false;
-                case GraphQLLocation l when ReferenceEquals(this, l):
-                    return true;
-                case GraphQLLocation l when Column != l.Column:
-                    return false;
-                case GraphQLLocation l when Line != l.Line:
-                    return false;
-            }
-            return true;
+                null => false,
+                GraphQLLocation l when ReferenceEquals(this, l) => true,
+                GraphQLLocation l when Column != l.Column => false,
+                GraphQLLocation l when Line != l.Line => false,
+                _ => true,
+            };
         }
 
         /// <inheritdoc />

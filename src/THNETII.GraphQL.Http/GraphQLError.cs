@@ -10,7 +10,6 @@ namespace THNETII.GraphQL.Http
 	/// </summary>
 	public class GraphQLError : IEquatable<GraphQLError>
     {
-
         /// <summary>
         /// The error message
         /// </summary>
@@ -34,20 +33,15 @@ namespace THNETII.GraphQL.Http
         /// <inheritdoc />
         public bool Equals(GraphQLError other)
         {
-            switch (other)
+            return other switch
             {
-                case null:
-                    return false;
-                case GraphQLError e when ReferenceEquals(this, e):
-                    return true;
-                case GraphQLError e when Message != e.Message:
-                    return false;
-                case GraphQLError e when Locations != e.Locations:
-                    return false;
-                case GraphQLError e when !Equals(AdditionalData, e.AdditionalData):
-                    return false;
-            }
-            return true;
+                null => false,
+                GraphQLError e when ReferenceEquals(this, e) => true,
+                GraphQLError e when Message != e.Message => false,
+                GraphQLError e when Locations != e.Locations => false,
+                GraphQLError e when !Equals(AdditionalData, e.AdditionalData) => false,
+                _ => true,
+            };
         }
 
         /// <inheritdoc />

@@ -64,18 +64,14 @@ namespace THNETII.GraphQL.Http
         /// <inheritdoc cref="IEquatable{GraphQLRequest}.Equals(GraphQLRequest)" />
 		public bool Equals(GraphQLRequest other)
         {
-            switch (other)
+            return other switch
             {
-                case null:
-                    return false;
-                case GraphQLRequest r when Query != r.Query:
-                    return false;
-                case GraphQLRequest r when OperationName != r.OperationName:
-                    return false;
-                case GraphQLRequest r when Variables != r.Variables:
-                    return false;
-            }
-            return true;
+                null => false,
+                GraphQLRequest r when Query != r.Query => false,
+                GraphQLRequest r when OperationName != r.OperationName => false,
+                GraphQLRequest r when Variables != r.Variables => false,
+                _ => true,
+            };
         }
 
         /// <inheritdoc />
