@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -17,16 +18,13 @@ namespace THNETII.GraphQL.Http
     /// </summary>
     public class GraphQLHttpClient : IDisposable
     {
-        private delegate Task<HttpResponseMessage> HttpPostFunc<TEndpoint>(
-            TEndpoint endpoint, HttpContent content,
-            CancellationToken cancelToken
-            );
+        private static readonly Func<string, HttpRequestMessage> urlMsgCtor =
+            url => new HttpRequestMessage(HttpMethod.Post, url);
+        private static readonly Func<Uri, HttpRequestMessage> uriMsgCtor =
+            uri => new HttpRequestMessage(HttpMethod.Post, uri);
 
         private readonly HttpClient httpClient;
         private readonly bool disposeClient;
-
-        private readonly HttpPostFunc<string> urlPost;
-        private readonly HttpPostFunc<Uri> uriPost;
 
         /// <summary>
         /// Creates a new GraphQL client using the specified <see cref="HttpClient"/>
@@ -49,9 +47,6 @@ namespace THNETII.GraphQL.Http
         {
             this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             disposeClient = !noDispose;
-
-            urlPost = this.httpClient.PostAsync;
-            uriPost = this.httpClient.PostAsync;
         }
 
         /// <summary>
@@ -72,68 +67,87 @@ namespace THNETII.GraphQL.Http
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="messageHandler"/> is <see langword="null"/>.</exception>
         public GraphQLHttpClient(HttpMessageHandler messageHandler, bool noDispose = false)
-            : this(new HttpClient(
-                messageHandler ?? throw new ArgumentNullException(nameof(messageHandler)),
-                disposeHandler: !noDispose
-                ))
+            : this(new HttpClient(messageHandler, disposeHandler: !noDispose))
         { }
+
+        protected static JsonSerializer DefaultSerializer { get; } =
+            JsonSerializer.CreateDefault();
+
+        protected virtual JsonSerializer JsonSerializer { get; } =
+            DefaultSerializer;
 
         /// <summary>
         /// Sends the the GraphQL request to the specified endpoint.
         /// </summary>
         /// <param name="endpoint">The GraphQL endpoint to send the request to.</param>
         /// <param name="request">A <see cref="GraphQLRequest"/> instance containing the query or mutation to process.</param>
-        /// <param name="mediaType">The media type to use as the request body MIME type. Defaults to the JSON MIME type.</param>
         /// <param name="cancelToken">An optional cancellation token that allows the request to be cancelled.</param>
-        /// <returns>The serialized response data as a JSON Token instance.</returns>
+        /// <returns>The serialized response.</returns>
         /// <exception cref="GraphQLException">The response body contained a GraphQL error.</exception>
-        public Task<JToken> SendAsync(string endpoint, GraphQLRequest request,
-            string mediaType = HttpWellKnownMediaType.ApplicationJsonUtf8,
+        public Task<GraphQLResponse<TData>> SendAsync<TData>(string endpoint, GraphQLRequest request,
             CancellationToken cancelToken = default) =>
-            SendAsync(urlPost, endpoint, request, mediaType, cancelToken);
+            SendAsync<string, TData>(urlMsgCtor, endpoint, request, cancelToken);
 
-        /// <inheritdoc cref="SendAsync(string, GraphQLRequest, string, CancellationToken)"/>
-        public Task<JToken> SendAsync(Uri endpoint, GraphQLRequest request,
-            string mediaType = HttpWellKnownMediaType.ApplicationJsonUtf8,
+        /// <inheritdoc cref="SendAsync(string, GraphQLRequest, CancellationToken)"/>
+        public Task<GraphQLResponse<TData>> SendAsync<TData>(Uri endpoint, GraphQLRequest request,
             CancellationToken cancelToken = default) =>
-            SendAsync(uriPost, endpoint, request, mediaType, cancelToken);
+            SendAsync<Uri, TData>(uriMsgCtor, endpoint, request, cancelToken);
 
-        private async Task<JToken> SendAsync<TEndpoint>(
-            HttpPostFunc<TEndpoint> httpPostAsync,
+        /// <summary>
+        /// Serializes the specified GraphQL request into a HTTP request body.
+        /// </summary>
+        /// <param name="request">The GraphQL request to be sent.</param>
+        /// <returns>An <see cref="HttpContent"/> instance to attach as the request body to an <see cref="HttpRequestMessage"/>.</returns>
+        protected virtual HttpContent CreateRequestBody(GraphQLRequest request)
+        {
+            var jsonBuilder = new StringBuilder();
+            using (var jsonWriter = new StringWriter(jsonBuilder))
+            {
+                JsonSerializer.Serialize(jsonWriter, request);
+                jsonWriter.Flush();
+            }
+            return new StringContent(jsonBuilder.ToString(), Encoding.UTF8,
+                HttpWellKnownMediaType.ApplicationJson);
+        }
+
+        private HttpRequestMessage CreateRequestMessage<TEndpoint>(
+            Func<TEndpoint, HttpRequestMessage> reqMsgFactory,
+            TEndpoint endpoint, HttpContent content)
+        {
+            var reqMsg = reqMsgFactory(endpoint);
+            ConfigureMessage(reqMsg);
+            reqMsg.Content = content;
+            return reqMsg;
+        }
+
+        /// <summary>
+        /// Configures an <see cref="HttpRequestMessage"/> that is about to be
+        /// sendt to the GraphQL endpoint. If overridden in an inheriting class,
+        /// the derived implementation can set additional headers, or otherwise
+        /// modify the request.
+        /// </summary>
+        /// <param name="reqMsg">The created request message to be sent.</param>
+        /// <remarks>
+        /// This method does gain access to the request body which is attached
+        /// to the request after this method returns.
+        /// </remarks>
+        protected virtual void ConfigureMessage(HttpRequestMessage reqMsg) { }
+
+        private async Task<GraphQLResponse<TData>> SendAsync<TEndpoint, TData>(
+            Func<TEndpoint, HttpRequestMessage> reqMsgFactory,
             TEndpoint endpoint, GraphQLRequest request,
-            string mediaType = HttpWellKnownMediaType.ApplicationJsonUtf8,
             CancellationToken cancelToken = default)
         {
             if (request is null)
                 throw new ArgumentNullException(nameof(request));
-            using (var content = CreatePayloadContent(request, mediaType))
-            using (
-                var response = await httpPostAsync(endpoint, content, cancelToken)
-                    .ConfigureAwait(false)
-                )
-            {
-                return await ProcessHttpResponse(response, cancelToken)
-                    .ConfigureAwait(false);
-            }
-
-            static StringContent CreatePayloadContent(GraphQLRequest request,
-                string mediaType = HttpWellKnownMediaType.ApplicationJson)
-            {
-                const Formatting payloadFormatting =
-#if DEBUG
-                Formatting.Indented
-#else // !DEBUG
-                Formatting.None
-#endif // DEBUG
-                ;
-                var payloadJson = JsonConvert.SerializeObject(request, payloadFormatting);
-                return string.IsNullOrWhiteSpace(mediaType)
-                    ? new StringContent(payloadJson, Encoding.UTF8, HttpWellKnownMediaType.ApplicationJson)
-                    : new StringContent(payloadJson, Encoding.UTF8, mediaType);
-            }
+            using var content = CreateRequestBody(request);
+            using var reqMsg = CreateRequestMessage(reqMsgFactory, endpoint, content);
+            using var respMsg = await httpClient.SendAsync(reqMsg).ConfigureAwait(false);
+            return await ProcessHttpResponse<TData>(respMsg, cancelToken)
+                .ConfigureAwait(false);
         }
 
-        private static async Task<JToken> ProcessHttpResponse(HttpResponseMessage httpResponse, CancellationToken cancelToken)
+        private async Task<GraphQLResponse<T>> ProcessHttpResponse<T>(HttpResponseMessage httpResponse, CancellationToken cancelToken)
         {
             httpResponse.EnsureSuccessStatusCode();
             using var responseReader = await httpResponse.Content
@@ -141,11 +155,13 @@ namespace THNETII.GraphQL.Http
             using var jsonReader = new JsonTextReader(responseReader);
             var jsonResponse = await JObject.LoadAsync(jsonReader, cancelToken)
                 .ConfigureAwait(false);
-            if (jsonResponse.TryGetValue(GraphQLResponse.ErrorsFieldName, out JToken errorToken))
-                throw new GraphQLException((errorToken as JObject).ToObject<GraphQLError>(), jsonResponse);
-            else if (jsonResponse.TryGetValue(GraphQLResponse.DataFieldName, out JToken dataToken))
-                return dataToken;
-            return null;
+            if (jsonResponse.TryGetValue(GraphQLError.ResponsePropertyName, out JToken errorToken))
+                throw errorToken switch
+                {
+                    JArray errorArray => new GraphQLException(errorArray.ToObject<GraphQLError[]>(JsonSerializer), jsonResponse),
+                    _ => new GraphQLException(errorToken.ToObject<GraphQLError>(JsonSerializer), jsonResponse)
+                };
+            return jsonResponse.ToObject<GraphQLResponse<T>>(JsonSerializer);
         }
 
         #region IDisposable Support

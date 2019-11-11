@@ -1,17 +1,26 @@
-﻿namespace THNETII.GraphQL.Http
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System.Collections.Generic;
+
+namespace THNETII.GraphQL.Http
 {
     /// <summary>
-    /// Provides the field names that are present in a GraphQL HTTP response.
+    /// Represents the message body of a GraphQL HTTP response.
     /// </summary>
-    public static class GraphQLResponse
+    public class GraphQLResponse<T>
     {
         /// <summary>
-        /// The JSON property name containing the data of the response.
+        /// The data returned in the response.
         /// </summary>
-        public const string DataFieldName = "data";
+        [JsonProperty("data")]
+        public T Data { get; protected set; }
+
         /// <summary>
-        /// The JSON property name containing errors in the response.
+        /// Gets additional properties received in the response message.
         /// </summary>
-        public const string ErrorsFieldName = "errors";
+        [JsonExtensionData]
+        public IDictionary<string, JToken> AdditionalProperties { get; } =
+            new Dictionary<string, JToken>();
     }
 }

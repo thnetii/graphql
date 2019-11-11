@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
 using Newtonsoft.Json.Linq;
 
@@ -10,30 +12,43 @@ namespace THNETII.GraphQL.Http
 	[Serializable]
     public class GraphQLException : Exception
     {
-        /// <inheritdoc cref="Exception()" />
+        /// <inheritdoc />
         public GraphQLException() : base() { }
 
-        /// <inheritdoc cref="Exception(string)" />
+        /// <inheritdoc />
         public GraphQLException(string message) : base(message) { }
 
-        /// <inheritdoc cref="Exception(string, Exception)" />
+        /// <inheritdoc />
         public GraphQLException(string message, Exception innerException)
             : base(message, innerException) { }
 
         /// <summary>
         /// Creates a new GraphQL Exception instance from an error received in
-        /// a <see cref="GraphQLResponse"/>.
+        /// a <see cref="GraphQLResponse{T}"/>.
         /// </summary>
-        /// <param name="error">The error received in an GraphQL HTTP response message.</param>
+        /// <param name="error">The errors received in an GraphQL HTTP response message.</param>
         /// <param name="jsonResponse">The entire JSON serialized response body of the HTTP Response message, if any.</param>
         /// <remarks>
         /// The value of the <see cref="GraphQLError.Message"/> property is used
         /// to initialize the exception <see cref="Exception.Message"/> property.
         /// </remarks>
         public GraphQLException(GraphQLError error, JObject jsonResponse)
-            : this(error?.Message!)
+            : this(new[] { error }, jsonResponse) { }
+
+        /// <summary>
+        /// Creates a new GraphQL Exception instance from the errors received in
+        /// a <see cref="GraphQLResponse{T}"/>.
+        /// </summary>
+        /// <param name="errors">The errors received in an GraphQL HTTP response message.</param>
+        /// <param name="jsonResponse">The entire JSON serialized response body of the HTTP Response message, if any.</param>
+        /// <remarks>
+        /// The value of the <see cref="GraphQLError.Message"/> property is used
+        /// to initialize the exception <see cref="Exception.Message"/> property.
+        /// </remarks>
+        public GraphQLException(IEnumerable<GraphQLError> errors, JObject jsonResponse)
+            : this(string.Join(Environment.NewLine, errors?.Select(e => e.Message) ?? Enumerable.Empty<string>()))
         {
-            GraphQLError = error;
+            GraphQLErrors = errors;
             JsonResponse = jsonResponse;
             if (!(jsonResponse is null))
             {
@@ -42,7 +57,7 @@ namespace THNETII.GraphQL.Http
             }
         }
 
-        /// <inheritdoc cref="Exception(SerializationInfo, StreamingContext)" />
+        /// <inheritdoc />
         protected GraphQLException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
             if (JsonResponse is JObject jsonResponse)
@@ -60,6 +75,6 @@ namespace THNETII.GraphQL.Http
         /// <summary>
 		/// The GraphQLError
 		/// </summary>
-		public GraphQLError GraphQLError { get; }
+		public IEnumerable<GraphQLError> GraphQLErrors { get; }
     }
 }
