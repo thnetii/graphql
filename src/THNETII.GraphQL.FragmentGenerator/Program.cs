@@ -3,8 +3,8 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Reflection;
 using System.Threading.Tasks;
+
 using GraphQL.Client;
-using GraphQL.Common.Response;
 
 namespace THNETII.GraphQL.FragmentGenerator
 {
@@ -19,37 +19,25 @@ namespace THNETII.GraphQL.FragmentGenerator
         static Task<int> Main(string[] args)
         {
             string description = typeof(Program).Assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description;
-            var options = new[]
+            var rootCommand = new RootCommand(description)
             {
-                new Option(new []{"--method", "-m"}, "HTTP Method to use", new Argument<GraphQLClientMethod>(GraphQLClientMethod.Post))
-            };
-            var rootCommand = new RootCommand(description, options)
-            {
-                Argument = new Argument<Uri>
+                new Argument<Uri>
                 {
                     Name = "uri",
                     Description = "GraphQL Endpoint",
                     Arity = ArgumentArity.ExactlyOne
                 },
-                Handler = CommandHandler.Create(async (Uri uri, GraphQLClientMethod method) =>
-                {
-                    using (var client = new GraphQLClient(uri))
-                    {
-                        GraphQLResponse response;
-                        switch (method)
-                        {
-                            case GraphQLClientMethod.Get:
-                                response = await client.GetIntrospectionQueryAsync();
-                                break;
-                            default:
-                            case GraphQLClientMethod.Post:
-                                response = await client.PostIntrospectionQueryAsync();
-                                break;
-                        }
-
-                    }
-                })
+                new Option<GraphQLClientMethod>(new []{"--method", "-m"}, () => GraphQLClientMethod.Post, "HTTP Method to use")
             };
+            rootCommand.Handler = CommandHandler.Create(async (Uri uri, GraphQLClientMethod method) =>
+            {
+                using var client = new GraphQLClient(uri);
+                var response = await (method switch
+                {
+                    GraphQLClientMethod.Get => client.GetIntrospectionQueryAsync(),
+                    _ => client.PostIntrospectionQueryAsync(),
+                }).ConfigureAwait(false);
+            });
             return rootCommand.InvokeAsync(args);
         }
     }
