@@ -9,10 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\dotnet-common\src\THNETII.Common\THNETII.Common.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="GraphQL" Version="2.4" />
     <PackageReference Include="GraphQL.Client" Version="2.0.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20104.2" />
